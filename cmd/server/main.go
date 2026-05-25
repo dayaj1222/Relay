@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"relay/internals/rooms"
+	"relay/internals/uploads"
 	"relay/internals/ws"
 
 	"github.com/gin-contrib/cors"
@@ -13,10 +14,10 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const UploadDir = "./uploads"
+
 func main() {
-
 	// Load env vars
-
 	err := godotenv.Load("../../.env")
 	if err != nil {
 		log.Println(".env not found")
@@ -56,11 +57,16 @@ func main() {
 	r.POST("/api/rooms", rooms.CreateRoom)
 	r.GET("/api/rooms", rooms.GetRooms)
 
+	// Websocket
 	r.GET("/api/ws", func(ctx *gin.Context) {
 		ws.AcceptConnection(pool, ctx)
 	})
 
-	log.Println("Server running on %s", port)
+	// Upload
+	r.POST("/api/upload", uploads.UploadHandler)
+	r.Static("/uploads", UploadDir)
+
+	log.Printf("Server running on %s", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}

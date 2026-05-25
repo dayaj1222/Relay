@@ -18,6 +18,19 @@ export const useWebsocket = (url) => {
         };
 
         socket.onmessage = (event) => {
+            try {
+                const parsedData = JSON.parse(event.data);
+                setMessages((prev) => [...prev, parsedData]);
+            } catch (err) {
+                console.error(
+                    "Failed to parse incoming WebSocket message: ",
+                    err,
+                );
+                setMessages((prev) => [
+                    ...prev,
+                    { type: 0, content: event.data },
+                ]);
+            }
             setMessages((prev) => [...prev, event.data]);
         };
 

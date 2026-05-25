@@ -23,7 +23,7 @@ func AcceptConnection(pool *Pool, ctx *gin.Context) {
 
 	conn, err := websocket.Accept(ctx.Writer, ctx.Request, options)
 	if err != nil {
-		log.Println("conn accept error: %v", err)
+		log.Printf("conn accept error: %v", err)
 		return
 	}
 

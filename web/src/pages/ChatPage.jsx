@@ -1,76 +1,104 @@
-import { useState, useMemo } from "react";
-import { useWebsocket } from "../hooks/useWebSocket";
+import React, { useState } from "react";
+import { useWebsocket } from "../hooks/useWebsocket";
+import { MessageBubbles, MessageType } from "../components/messageBubbles.jsx";
 
 export const ChatPage = () => {
-  const [input, setInput] = useState("");
+  // Replace with your current actual WebSocket URL config
+  const { messages, sendMessage } = useWebsocket(
+    "ws://[::1]:8080/api/ws?userId=2020",
+  );
+  const [textInput, setTextInput] = useState("");
+  const currentUserId = "2020";
 
-  const wsUrl = useMemo(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8080";
-    const wsProtocol = apiUrl.startsWith("https") ? "wss" : "ws";
-    const host = new URL(apiUrl).host;
-    return `${wsProtocol}://${host}/api/ws?userId=2020`;
-  }, []);
-
-  const { messages, isConnected, sendMessage } = useWebsocket(wsUrl);
-
-  const handleSubmit = (e) => {
+  // 1. Text Submission Handler
+  const handleSendText = (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!textInput.trim()) return;
 
-    // Send the raw string down the WebSocket pipe
-    sendMessage(input);
-    setInput("");
+    const payload = {
+      senderId: "", // Backend overrides this
+      type: MessageType.TEXT,
+      content: textInput.trim(),
+    };
+
+    sendMessage(JSON.stringify(payload));
+    setTextInput("");
+  };
+
+  // 2. File Upload Orchestrator (Bridges HTTP and WebSockets)
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Determine target enum type by file extension/mime type
+    let messageType = MessageType.DOCUMENT;
+    if (file.type.startsWith("video/")) messageType = MessageType.VIDEO;
+    if (file.type.startsWith("audio/")) messageType = MessageType.AUDIO;
+
+    // Package bytes into standard multi-part form payload
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      // Send raw file bytes over HTTP rather than WebSocket
+      const response = await fetch("http://[::1]:8080/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Upload failed");
+      const data = await response.json();
+      // Expected backend response: { fileUrl: "...", fileName: "..." }
+
+      // Send the lightweight signaling payload over WebSocket
+      const payload = {
+        senderId: "",
+        type: messageType,
+        content: {
+          fileUrl: data.fileUrl,
+          fileName: file.name,
+        },
+      };
+
+      sendMessage(JSON.stringify(payload));
+    } catch (err) {
+      console.error("File upload network error:", err);
+    }
   };
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 p-6 bg-white border border-gray-200 rounded-xl shadow-sm font-sans">
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">
-        Global Chat Pool
-      </h2>
-
-      {/* Connection Status Indicator */}
-      <div className="text-sm text-gray-600 mb-4">
-        Status:{" "}
-        <span
-          className={`font-bold ${isConnected ? "text-green-600" : "text-red-500"}`}
-        >
-          {isConnected ? "Connected" : "Disconnected"}
-        </span>
+    <div className="flex flex-col h-screen max-w-2xl mx-auto border shadow-md">
+      {/* Scrollable Feed Container */}
+      <div className="flex-1 overflow-hidden bg-gray-50">
+        <MessageBubbles messages={messages} currentUserId={currentUserId} />
       </div>
 
-      {/* Message Feed Display */}
-      <div className="h-[350px] border border-gray-200 rounded-lg p-4 bg-gray-50 overflow-y-auto flex flex-col gap-2">
-        {messages.length === 0 ? (
-          <p className="text-gray-400 text-center italic my-auto">
-            No messages yet. Type below to broadcast...
-          </p>
-        ) : (
-          messages.map((msg, index) => (
-            <div
-              key={index}
-              className="flex items-center gap-2 p-2 bg-white rounded-md shadow-sm border border-gray-100"
-            >
-              <span className="text-base">👤</span>
-              <span className="text-gray-700 break-all text-sm">{msg}</span>
-            </div>
-          ))
-        )}
-      </div>
+      {/* Input Action Form Block */}
+      <form
+        onSubmit={handleSendText}
+        className="flex items-center gap-2 p-3 border-t bg-white"
+      >
+        <label className="p-2 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer text-xl">
+          📎
+          <input
+            type="file"
+            onChange={handleFileUpload}
+            className="hidden"
+            accept="video/*,audio/*,application/pdf,.doc,.docx"
+          />
+        </label>
 
-      {/* Outbound Message Form */}
-      <form onSubmit={handleSubmit} className="mt-4 flex gap-2">
         <input
           type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message to broadcast..."
-          className="flex-grow px-4 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-          disabled={!isConnected}
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          placeholder="Type a message..."
+          className="flex-1 p-2 border rounded-md outline-none text-sm"
         />
+
         <button
           type="submit"
-          className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-          disabled={!isConnected}
+          className="p-2 px-4 bg-blue-600 text-white rounded-md text-sm font-medium"
         >
           Send
         </button>
