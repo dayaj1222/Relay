@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { RoomsPage } from "./pages/RoomsPage.jsx";
+import { ChatPage } from "./pages/ChatPage.jsx";
 
 function App() {
   useEffect(() => {
@@ -11,7 +12,7 @@ function App() {
 
   return (
     <>
-      <RoomsPage />
+      <ChatPage />
     </>
   );
 }
