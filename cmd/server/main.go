@@ -5,9 +5,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"relay/internals/db"
 	"relay/internals/rooms"
 	"relay/internals/uploads"
+	"relay/internals/users"
 	"relay/internals/ws"
+	"syscall"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -18,40 +22,51 @@ const UploadDir = "./uploads"
 
 func main() {
 	// Load env vars
-	err := godotenv.Load("../../.env")
-	if err != nil {
-		log.Println(".env not found")
+	if err := godotenv.Load("../../.env"); err != nil {
+		log.Println(".env file not found, reading from system environment")
 	}
 
 	port := os.Getenv("PORT")
 	clientURL := os.Getenv("CLIENT_URL")
+	connectionString := os.Getenv("POSTGRES_URL")
+
+	// FIX 1: Rename the local instance to 'database' to prevent shadowing package 'db'
+	database, err := db.Connect(connectionString)
+	if err != nil {
+		log.Fatalf("could not connect to database: %v", err)
+	}
+	defer database.Close()
+
+	// FIX 2: Handle graceful termination signals for background workers
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	pool := ws.NewPool()
+	go pool.Start(ctx) // Shuts down loop automatically when context closes
 
-	bgCtx := context.Background()
-	go pool.Start(bgCtx)
+	userRepo := users.NewRepository(database)
+	userService := users.NewService(userRepo)
+	userHandler := users.NewHandler(userService)
 
 	r := gin.Default()
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			clientURL,
-		},
-		AllowMethods: []string{
-			"GET", "POST", "PUT", "DELETE", "OPTIONS",
-		},
+		AllowOrigins: []string{clientURL},
+		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{
 			"Origin", "Content-Type", "Authorization",
 			"Upgrade", "Connection", "Sec-WebSocket-Key", "Sec-WebSocket-Version",
 		},
-		ExposeHeaders: []string{
-			"Upgrade", "Connection",
-		},
+		ExposeHeaders: []string{"Upgrade", "Connection"},
 	}))
 
 	r.GET("/ping", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
+
+	// User
+	r.POST("/api/register", userHandler.Register)
+	r.POST("/api/login", userHandler.Login)
 
 	// Rooms
 	r.POST("/api/rooms", rooms.CreateRoom)
