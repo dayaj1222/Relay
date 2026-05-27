@@ -30,19 +30,19 @@ func main() {
 	clientURL := os.Getenv("CLIENT_URL")
 	connectionString := os.Getenv("POSTGRES_URL")
 
-	// FIX 1: Rename the local instance to 'database' to prevent shadowing package 'db'
 	database, err := db.Connect(connectionString)
 	if err != nil {
 		log.Fatalf("could not connect to database: %v", err)
 	}
 	defer database.Close()
 
-	// FIX 2: Handle graceful termination signals for background workers
+	// Handle graceful termination signals for background workers
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool := ws.NewPool()
-	go pool.Start(ctx) // Shuts down loop automatically when context closes
+	// Initialize WebSocket Infrastructure (e.g., max 256 connections per room, 1000 max active pools)
+	manager := ws.NewPoolManager(ctx, 256, 1000)
+	wsHandler := ws.NewWebSocketHandler(manager)
 
 	userRepo := users.NewRepository(database)
 	userService := users.NewService(userRepo)
@@ -72,9 +72,22 @@ func main() {
 	r.POST("/api/rooms", rooms.CreateRoom)
 	r.GET("/api/rooms", rooms.GetRooms)
 
-	// Websocket
-	r.GET("/api/ws", func(ctx *gin.Context) {
-		ws.AcceptConnection(pool, ctx)
+	// Websocket - Integrated with clean architecture
+	// (Ensure an authentication middleware runs before this endpoint to set "user_id" into the gin context)
+	r.GET("/api/ws", func(c *gin.Context) {
+		// 1. Get user identity from auth middleware context strings
+		userID := c.GetString("user_id")
+		if userID == "" {
+			// Fallback/Safety block if your middleware naming differs
+			userID = "anonymous_fallback"
+		}
+
+		// 2. Wrap it inside standard context.Context to cross boundary cleanly
+		reqCtx := context.WithValue(c.Request.Context(), "user_id", userID)
+		c.Request = c.Request.WithContext(reqCtx)
+
+		// 3. Directly run the standard interface handler
+		wsHandler.ServeHTTP(c.Writer, c.Request)
 	})
 
 	// Upload
@@ -82,6 +95,8 @@ func main() {
 	r.Static("/uploads", UploadDir)
 
 	log.Printf("Server running on %s", port)
+
+	// Pass the lifecycle context to handle smooth termination sequences
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}
