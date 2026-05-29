@@ -70,3 +70,19 @@ func (r *Repository) Update(ctx context.Context, user *User) error {
 
 	return err
 }
+
+func (r *Repository) GetUserIDByToken(ctx context.Context, token string) (string, error) {
+	query := `
+		SELECT CAST(id AS TEXT)
+		FROM users
+		WHERE api_key_hash = $1
+		LIMIT 1`
+
+	var userID string
+	err := r.db.QueryRowContext(ctx, query, token).Scan(&userID)
+	if err != nil {
+		return "", err
+	}
+
+	return userID, nil
+}

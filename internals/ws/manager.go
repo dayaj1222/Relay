@@ -14,45 +14,29 @@ func NewPoolManager(ctx context.Context, defaultMaxConn int, maxPools int) *Pool
 	}
 }
 
-// Gets or creates pools when new connection occurs
-func (pm *PoolManager) ensurePool(id ConversationID, poolType PoolType) error {
+func (pm *PoolManager) HandleConnection(ctx context.Context, id ConversationID, poolType PoolType, client *Client) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	if _, exists := pm.pools[id]; exists {
-		return nil
+	if _, exists := pm.pools[id]; !exists {
+		if len(pm.pools) >= pm.maxPools {
+			return errors.New("server capacity reached: cannot create more pools")
+		}
+
+		newPool := newPool(poolType, id, func(roomID ConversationID) {
+			pm.mu.Lock()
+			delete(pm.pools, roomID)
+			pm.mu.Unlock()
+		})
+
+		pm.pools[id] = newPool
+		go newPool.start(pm.appCtx)
 	}
 
-	if len(pm.pools) >= pm.maxPools {
-		return errors.New("server capacity reached: cannot create more pools")
-	}
-
-	// Self deletion fucntion is passed to each pool
-	newPool := newPool(poolType, id, func(roomID ConversationID) {
-		pm.mu.Lock()
-		delete(pm.pools, roomID)
-		pm.mu.Unlock()
-	})
-
-	pm.pools[id] = newPool
-	go newPool.start(pm.appCtx)
-
-	return nil
-}
-
-func (pm *PoolManager) HandleConnection(rewCtx context.Context, id ConversationID, poolType PoolType, client *Client) error {
-	if err := pm.ensurePool(id, poolType); err != nil {
-		return err
-	}
-
-	pm.mu.Lock()
 	p := pm.pools[id]
-
 	if len(p.engine.clients) >= pm.defaultMaxConn {
-		pm.mu.Unlock()
 		return errors.New("pool capacity reached")
 	}
-	pm.mu.Unlock()
 
 	p.engine.register <- client
 	return nil

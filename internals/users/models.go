@@ -18,7 +18,7 @@ type User struct {
 
 type RegisterUserDTO struct {
 	Username    string  `json:"username" binding:"required,min=3,max=30"`
-	Email       string  `json:"email" binding:"required,email"`
+	Email       string  `json:"email"`
 	Password    string  `json:"password" binding:"required"`
 	DisplayName *string `json:"displayName"`
 }

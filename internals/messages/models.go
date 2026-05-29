@@ -22,7 +22,7 @@ func (j JSONB) Value() (driver.Value, error) {
 	if len(j) == 0 {
 		return nil, nil
 	}
-	return string(j), nil
+	return []byte(j), nil // ← was string(j)
 }
 
 func (j *JSONB) Scan(value any) error {

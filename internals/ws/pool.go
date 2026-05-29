@@ -46,6 +46,7 @@ func (p *pool) start(ctx context.Context) {
 				case client.Send <- message:
 				default:
 					p.removeClient(client)
+					log.Printf("[POOL %s] Dropped slow client: %s\n", p.id, client.ID)
 				}
 			}
 

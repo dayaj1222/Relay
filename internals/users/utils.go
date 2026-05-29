@@ -31,10 +31,14 @@ func generateAPIKey() (string, string, error) {
 
 	rawKey := hex.EncodeToString(bytes)
 
-	hash := sha256.Sum256([]byte(rawKey))
-	hashString := hex.EncodeToString(hash[:])
+	hashString := HashAPIKey(rawKey)
 
 	return rawKey, hashString, nil
+}
+
+func HashAPIKey(rawKey string) string {
+	hash := sha256.Sum256([]byte(rawKey))
+	return hex.EncodeToString(hash[:])
 }
 
 func IsStrongPassword(password string) bool {
@@ -58,4 +62,11 @@ func IsStrongPassword(password string) bool {
 	}
 
 	return false
+}
+
+func (u *User) GetDisplayName() string {
+	if u.DisplayName != nil {
+		return *u.DisplayName
+	}
+	return u.Username
 }
