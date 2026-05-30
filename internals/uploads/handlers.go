@@ -10,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var port = os.Getenv("PORT")
+
 const MaxUploadSize = 50 * 1024 * 1024
 const UploadDir = "./uploads"
 
@@ -37,7 +39,10 @@ func UploadHandler(c *gin.Context) {
 		return
 	}
 
-	fileURL := fmt.Sprintf("http://localhost:8080/uploads/%s", uniqueName)
+	if port == "" {
+		port = "8000"
+	}
+	fileURL := fmt.Sprintf("http://localhost:%s/uploads/%s", port, uniqueName)
 	c.JSON(http.StatusOK, gin.H{
 		"fileUrl":  fileURL,
 		"fileName": file.Filename,

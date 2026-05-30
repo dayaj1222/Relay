@@ -28,6 +28,7 @@ export function useWebSocket(conversationId, onMessage) {
                 console.error("Failed to parse WS message:", err);
             }
         });
+
         socket.addEventListener("close", () => setConnected(false));
         socket.addEventListener("error", (err) => {
             console.error("WebSocket error:", err);

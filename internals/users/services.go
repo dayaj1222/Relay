@@ -107,30 +107,21 @@ func (s *Service) FindUserIDByToken(ctx context.Context, rawToken string) (strin
 	return id, nil
 }
 
+// GetByUsername returns a user by username, or an error if not found.
+func (s *Service) GetByUsername(ctx context.Context, username string) (*User, error) {
+	user, err := s.repo.GetByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, fmt.Errorf("user not found: %s", username)
+	}
+	return user, nil
+}
+
 func isUniqueConstraintError(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
-func (r *Repository) UpdateAPIKey(ctx context.Context, userID int, newKeyHash string) error {
-	query := `
-		UPDATE users 
-		SET api_key_hash = $1, updated_at = NOW() 
-		WHERE id = $2`
 
-	result, err := r.db.ExecContext(ctx, query, newKeyHash, userID)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("user with ID %d not found", userID)
-	}
-
-	return nil
-}

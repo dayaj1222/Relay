@@ -80,11 +80,13 @@ func (h *Handler) GetUserByUsername(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username required"})
 		return
 	}
-	user, err := h.service.repo.GetByUsername(c.Request.Context(), username)
-	if err != nil || user == nil {
+
+	user, err := h.service.GetByUsername(c.Request.Context(), username)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":           user.ID,
 		"username":     user.Username,

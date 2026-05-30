@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { MessageInput } from "../components/MessageInput";
 import { MessageList } from "../components/Message";
 import { ConversationList } from "../components/ConversationList";
 import { CreateConversationModal } from "../components/CreateConversationModal";
@@ -17,12 +18,28 @@ export function ChatPage({ user, onLogout }) {
   const [createType, setCreateType] = useState("dm");
   const messagesEndRef = useRef(null);
 
-  const { connected, send } = useWebSocket(activeConversation?.id, (data) => {
+  const handleWsMessage = useCallback((data) => {
     if (data.type === "message") {
-      setMessages((prev) => [...prev, data]);
-      scrollToBottom();
+      setMessages((prev) => {
+        const tempIndex = prev.findIndex(
+          (m) =>
+            String(m.id).startsWith("temp-") && m.senderId == data.senderId,
+        );
+        const incoming = { ...data, type: data.msgType ?? 0 };
+        if (tempIndex !== -1) {
+          const updated = [...prev];
+          updated[tempIndex] = incoming;
+          return updated;
+        }
+        return [...prev, incoming];
+      });
     }
-  });
+  }, []);
+
+  const { connected, send } = useWebSocket(
+    activeConversation?.id,
+    handleWsMessage,
+  );
 
   useEffect(() => {
     loadConversations();
@@ -82,10 +99,23 @@ export function ChatPage({ user, onLogout }) {
     const text = messageText;
     setMessageText("");
 
+    // Optimistic update with temp id
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId,
+      senderId: user.id,
+      content: { text },
+      type: msg.type,
+      createdAt: new Date().toISOString(),
+      conversationId: activeConversation.id,
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
     try {
-      const msg = await api.sendMessage(activeConversation.id, text);
-      setMessages((prev) => [...prev, msg]); // ← add sent message immediately
+      await api.sendMessage(activeConversation.id, text);
     } catch (err) {
+      // Remove optimistic message on failure
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setError("Failed to send message");
       setMessageText(text);
     }
@@ -187,7 +217,6 @@ export function ChatPage({ user, onLogout }) {
                 </p>
               </div>
             </div>
-
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
               {loading ? (
@@ -201,27 +230,33 @@ export function ChatPage({ user, onLogout }) {
                 </>
               )}
             </div>
-
             {/* Input */}
-            <form
-              onSubmit={handleSendMessage}
-              className="px-6 py-4 border-t border-gray-700 bg-gray-800 flex gap-3"
-            >
-              <input
-                type="text"
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-blue-500 placeholder-gray-500"
-              />
-              <button
-                type="submit"
-                disabled={!messageText.trim() || !connected}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-medium rounded-lg transition"
-              >
-                Send
-              </button>
-            </form>
+            <MessageInput
+              disabled={!connected}
+              onSend={async (msg) => {
+                const tempId = `temp-${Date.now()}`;
+                const optimisticMsg = {
+                  id: tempId,
+                  senderId: user.id,
+                  content: msg.content,
+                  type: msg.type,
+                  createdAt: new Date().toISOString(),
+                };
+                setMessages((prev) => [...prev, optimisticMsg]);
+                try {
+                  const contentToSend =
+                    msg.type === 0 ? msg.content.text : msg.content;
+                  await api.sendMessage(
+                    activeConversation.id,
+                    contentToSend,
+                    msg.type,
+                  );
+                } catch (err) {
+                  setMessages((prev) => prev.filter((m) => m.id !== tempId));
+                  setError("Failed to send message");
+                }
+              }}
+            />{" "}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">

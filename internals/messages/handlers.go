@@ -4,17 +4,19 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"relay/internals/ws"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 type HTTPHandler struct {
-	store *Store
+	store   *Store
+	manager *ws.PoolManager
 }
 
-func NewHTTPHandler(store *Store) *HTTPHandler {
-	return &HTTPHandler{store: store}
+func NewHTTPHandler(store *Store, manager *ws.PoolManager) *HTTPHandler {
+	return &HTTPHandler{store: store, manager: manager}
 }
 
 type SendMessageDTO struct {
@@ -25,6 +27,7 @@ type SendMessageDTO struct {
 // SendMessage handles POST /api/conversations/:id/messages
 func (h *HTTPHandler) SendMessage(c *gin.Context) {
 	convID := c.Param("id")
+
 	userID, ok := c.Get("user_id")
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -38,7 +41,7 @@ func (h *HTTPHandler) SendMessage(c *gin.Context) {
 	}
 
 	var dto SendMessageDTO
-	if err := c.BindJSON(&dto); err != nil {
+	if err = c.BindJSON(&dto); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -53,6 +56,23 @@ func (h *HTTPHandler) SendMessage(c *gin.Context) {
 		log.Printf("failed to create message: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create message"})
 		return
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"type":           "message",
+		"id":             msg.ID,
+		"senderId":       msg.SenderID,
+		"content":        msg.Content,
+		"createdAt":      msg.CreatedAt,
+		"conversationId": msg.ConvID,
+	})
+
+	if err == nil {
+		if broadcastErr := h.manager.BroadcastToPool(ws.ConversationID(convID), payload); broadcastErr != nil {
+			log.Printf("broadcast failed: %v", broadcastErr)
+		} else {
+			log.Printf("broadcast succeeded to pool %s", convID)
+		}
 	}
 
 	c.JSON(http.StatusCreated, msg)

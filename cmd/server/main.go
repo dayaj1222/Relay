@@ -57,7 +57,7 @@ func main() {
 
 	// Initialize Messages Infrastructure
 	msgStore := messages.NewStore(database)
-	msgHandler := messages.NewHTTPHandler(msgStore)
+	msgHandler := messages.NewHTTPHandler(msgStore, manager)
 
 	r := gin.Default()
 

@@ -76,13 +76,15 @@ class APIClient {
     }
 
     // Messages
-    sendMessage(conversationId, text) {
+    sendMessage(conversationId, content, type = 0) {
+        const body =
+            type === 0
+                ? { type: 0, content: { text: content } }
+                : { type, content };
+
         return this.request(`/conversations/${conversationId}/messages`, {
             method: "POST",
-            body: JSON.stringify({
-                type: 0,
-                content: { text }, // ← was JSON.stringify({ text }), now a plain object
-            }),
+            body: JSON.stringify(body),
         });
     }
 
@@ -100,6 +102,26 @@ class APIClient {
 
     getUserByUsername(username) {
         return this.request(`/users?username=${encodeURIComponent(username)}`);
+    }
+    async uploadFile(file) {
+        const token = localStorage.getItem("token");
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(`${API_BASE_URL}/upload`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                // Don't set Content-Type — browser sets it with boundary automatically
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `Upload failed: ${response.status}`);
+        }
+        return response.json(); // returns { fileUrl, fileName }
     }
 }
 

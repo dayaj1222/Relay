@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -69,6 +70,29 @@ func (r *Repository) Update(ctx context.Context, user *User) error {
 	_, err := r.db.ExecContext(ctx, query, user.DisplayName, user.PasswordHash, user.APIKeyHash, user.Status, user.ID)
 
 	return err
+}
+
+func (r *Repository) UpdateAPIKey(ctx context.Context, userID int, newKeyHash string) error {
+	query := `
+		UPDATE users 
+		SET api_key_hash = $1, updated_at = NOW() 
+		WHERE id = $2`
+
+	result, err := r.db.ExecContext(ctx, query, newKeyHash, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("user with ID %d not found", userID)
+	}
+
+	return nil
 }
 
 func (r *Repository) GetUserIDByToken(ctx context.Context, token string) (string, error) {

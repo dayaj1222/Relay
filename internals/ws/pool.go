@@ -7,7 +7,7 @@ import (
 	"github.com/coder/websocket"
 )
 
-func newPool(poolType PoolType, conversationID ConversationID, onEmpty func(ConversationID)) *pool {
+func newPool(poolType PoolType, conversationID ConversationID) *pool {
 	h := &hub{
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan []byte),
@@ -15,10 +15,9 @@ func newPool(poolType PoolType, conversationID ConversationID, onEmpty func(Conv
 		unregister: make(chan *Client),
 	}
 	return &pool{
-		id:      conversationID,
-		engine:  h,
-		pType:   poolType,
-		onEmpty: onEmpty,
+		id:     conversationID,
+		engine: h,
+		pType:  poolType,
 	}
 }
 
@@ -33,11 +32,7 @@ func (p *pool) start(ctx context.Context) {
 			if _, ok := p.engine.clients[client]; ok {
 				log.Printf("[POOL %s] Client unregistered: %s (remaining: %d)\n", p.id, client.ID, len(p.engine.clients)-1)
 				p.removeClient(client)
-				if len(p.engine.clients) == 0 {
-					log.Printf("[POOL %s] Pool empty, shutting down\n", p.id)
-					p.onEmpty(p.id)
-					return
-				}
+
 			}
 
 		case message := <-p.engine.broadcast:
@@ -55,13 +50,13 @@ func (p *pool) start(ctx context.Context) {
 			for client := range p.engine.clients {
 				p.removeClient(client)
 			}
-			p.onEmpty(p.id)
-			return
+
 		}
 	}
 }
 
 func (p *pool) removeClient(client *Client) {
+	log.Printf("[POOL %s] Removing client %s, remaining: %d\n", p.id, client.ID, len(p.engine.clients)-1)
 	delete(p.engine.clients, client)
 	close(client.Send)
 	if client.Conn != nil {

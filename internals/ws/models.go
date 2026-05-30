@@ -34,10 +34,9 @@ type hub struct {
 
 // pool bridges the metadata with the communication engine.
 type pool struct {
-	id      ConversationID
-	pType   PoolType
-	engine  *hub
-	onEmpty func(ConversationID)
+	id     ConversationID
+	pType  PoolType
+	engine *hub
 }
 
 // PoolManager is the single public entry point for the package.

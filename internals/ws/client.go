@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"relay/internals/messages"
 
 	"github.com/coder/websocket"
 )
@@ -36,7 +35,7 @@ func (c *Client) ReadPump(ctx context.Context, pm *PoolManager, id ConversationI
 			log.Printf("[ReadPump %s] Message too large (%d bytes)\n", c.ID, len(data))
 			break
 		}
-		var msg messages.Message
+		var msg map[string]any
 		err = json.Unmarshal(data, &msg)
 		if err != nil {
 			log.Printf("error unmarshalling message: %v\n", err)
@@ -44,15 +43,15 @@ func (c *Client) ReadPump(ctx context.Context, pm *PoolManager, id ConversationI
 		}
 
 		// Put the known sender id and reencode for broadcasting
-		msg.SenderID = c.ID
+		msg["senderID"] = c.ID
 		secureData, err := json.Marshal(msg)
 		if err != nil {
 			log.Printf("error marshalling secure message: %v\n", err)
 			continue
 		}
 
-	if err := pm.BroadcastToPool(id, secureData); err != nil {
-		log.Printf("broadcast error: %v\n", err)
+		if err := pm.BroadcastToPool(id, secureData); err != nil {
+			log.Printf("broadcast error: %v\n", err)
 		}
 	}
 }
